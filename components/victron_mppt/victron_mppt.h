@@ -1,25 +1,27 @@
 #pragma once
 
 #include <stdint.h>
-#include <inttypes.h>
-
 #include "driver/uart.h"
+#include "hal/uart_types.h"
+#include "soc/gpio_num.h"
+#include "esp_err.h"
 
-#define VICTRON_MPPT_DATA_FORMAT "\n\rPID\t0x%hx\n\rFW\t%hu\n\rSER#\t%s\n\rV\t%ld\n\rI\t%ld\n\rVPV\t%ld\n\rPPV\t%ld\n\rCS\t%hhu\n\rMPPT\t%hhu\n\rOR\t0x%lx\n\rERR\t%hhu\n\rLOAD\t%s\n\rIL\t%ld\n\rH19\t%ld\n\rH20\t%ld\n\rH21\t%ld\n\rH22\t%ld\n\rH23\t%ld\n\rHSDS\t%ld\n\rChecksum\t"
-#define VICTRON_MPPT_DATA_EXAMPLE "\n\rPID\t0xA075\n\rFW\t174\n\rSER#\tHQ25404JDUQ\n\rV\t12920\n\rI\t-10\n\rVPV\t30\n\rPPV\t0\n\rCS\t0\n\rMPPT\t0\n\rOR\t0x00000001\n\rERR\t0\n\rLOAD\tON\n\rIL\t0\n\rH19\t3\n\rH20\t0\n\rH21\t0\n\rH22\t0\n\rH23\t2\n\rHSDS\t6\n\rChecksum\t"
+#define VICTRON_MPPT_DATA_FORMAT "\r\nPID\t0x%hx\r\nFW\t%hu\r\nSER#\t%s\r\nV\t%ld\r\nI\t%ld\r\nVPV\t%ld\r\nPPV\t%ld\r\nCS\t%hhu\r\nMPPT\t%hhu\r\nOR\t0x%lx\r\nERR\t%hhu\r\nLOAD\t%s\r\nIL\t%ld\r\nH19\t%ld\r\nH20\t%ld\r\nH21\t%ld\r\nH22\t%ld\r\nH23\t%ld\r\nHSDS\t%ld\r\nChecksum\t"
+#define VICTRON_MPPT_DATA_EXAMPLE "\r\nPID\t0xA075\r\nFW\t174\r\nSER#\tHQ25404JDUQ\r\nV\t12920\r\nI\t-10\r\nVPV\t30\r\nPPV\t0\r\nCS\t0\r\nMPPT\t0\r\nOR\t0x00000001\r\nERR\t0\r\nLOAD\tON\r\nIL\t0\r\nH19\t3\r\nH20\t0\r\nH21\t0\r\nH22\t0\r\nH23\t2\r\nHSDS\t6\r\nChecksum\t"
 
 #define VICTRON_MPPT_BAUD_RATE 19200
 #define VICTRON_MPPT_DATA_BITS UART_DATA_8_BITS
 #define VICTRON_MPPT_PARITY UART_PARITY_DISABLE
 #define VICTRON_MPPT_STOP_BITS UART_STOP_BITS_1
 #define VICTRON_MPPT_FLOWCTRL UART_HW_FLOWCTRL_DISABLE
+#define VICTRON_MPPT_RX_BUFFER_SIZE 1024
 
-extern const uart_config_t victron_mppt_uart_config;
+#define VICTRON_MPPT_TRANSMIT_INTERVAL_MS 1000
 
 typedef struct {
-    uint16_t pid;
+    uint16_t product_id;
     uint16_t firmware_version;
-    char serial_num[12];
+    char serial_number[12];
     int32_t battery_voltage;
     int32_t battery_current;
     int32_t solar_voltage;
@@ -39,6 +41,42 @@ typedef struct {
     uint32_t checksum;
 } victron_mppt_data_t;
 
-int victron_mppt_parse_text(char *text, victron_mppt_data_t *data);
-int victron_mppt_check_text_checksum(char *text, size_t length);
+typedef enum victron_mppt_field_t {
+    PRODUCT_ID,
+    FIRMWARE_VERSION,
+    SERIAL_NUMBER,
+    BATTERY_VOLTAGE,
+    BATTERY_CURRENT,
+    SOLAR_VOLTAGE,
+    SOLAR_POWER,
+    STATE_OF_OPERATION,
+    TRACKER_OPERATION_MODE,
+    OFF_REASON,
+    ERROR_CODE,
+    LOAD_OUTPUT_STATE,
+    LOAD_CURRENT,
+    YIELD_TOTAL,
+    YIELD_TODAY,
+    MAXIMUM_POWER_TODAY,
+    YIELD_YESTERDAY,
+    MAXIMUM_POWER_YESTERDAY,
+    DAY_SEQUENCE_NUMBER,
+    CHECKSUM,
+    UNKNOWN
+} victron_mppt_field_t;
+
+typedef struct {
+    uart_port_t uart_port;
+    size_t uart_rx_data_length;
+    uint8_t *uart_rx_buffer;
+} victron_mppt_t;
+
+typedef victron_mppt_t * victron_mppt_handle_t;
+
+esp_err_t victron_mppt_init(victron_mppt_handle_t handle, uart_port_t uart_port, gpio_num_t rx_gpio_num, gpio_num_t tx_gpio_num);
+esp_err_t victron_mppt_free(victron_mppt_handle_t handle);
+esp_err_t victron_mppt_read_data(victron_mppt_handle_t handle);
+int victron_mppt_parse_text(victron_mppt_handle_t handle, victron_mppt_data_t *data);
 void victron_mppt_print_data(victron_mppt_data_t *data);
+victron_mppt_field_t victron_mppt_get_field_from_str(const char *field);
+esp_err_t victron_mppt_set_value_from_str(const char *field, const char *value, victron_mppt_data_t *data);
