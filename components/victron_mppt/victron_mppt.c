@@ -29,10 +29,10 @@ esp_err_t victron_mppt_init(victron_mppt_handle_t handle, uart_port_t uart_port,
 
     handle->uart_port = uart_port;
     handle->uart_rx_buffer = (uint8_t *) malloc(VICTRON_MPPT_RX_BUFFER_SIZE);
-      if (!handle->uart_rx_buffer)
+    if (!handle->uart_rx_buffer)
         return ESP_ERR_NO_MEM;
 
-    CHECK(uart_driver_install(handle->uart_port, VICTRON_MPPT_RX_BUFFER_SIZE, 0, 0, NULL, 0));
+    CHECK(uart_driver_install(handle->uart_port, VICTRON_MPPT_RX_BUFFER_SIZE, 0, VICTRON_MPPT_UART_QUEUE_SIZE, &handle->uart_event_queue, 0));
     CHECK(uart_param_config(handle->uart_port, &uart_config));
     CHECK(uart_set_pin(handle->uart_port, tx_gpio_num, rx_gpio_num, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
@@ -78,9 +78,6 @@ esp_err_t victron_mppt_read_data(victron_mppt_handle_t handle)
 
       ESP_LOGI(TAG, "UART RX buffer has %d bytes.", handle->uart_rx_data_length);
       ESP_LOG_BUFFER_HEXDUMP(TAG, handle->uart_rx_buffer, handle->uart_rx_data_length, ESP_LOG_INFO);
-
-      // Check data integrity
-      CHECK(victron_mppt_check_text_checksum(handle));
 
       // Clear buffer
       uart_flush(handle->uart_port);
@@ -206,21 +203,35 @@ esp_err_t victron_mppt_parse_text(victron_mppt_handle_t handle, victron_mppt_dat
 
   CHECK(victron_mppt_check_text_checksum(handle));
 
-  // NULL terminate since we use string functions
-  handle->uart_rx_buffer[handle->uart_rx_data_length] = '\0';
+  char *buffer = (char *) malloc(handle->uart_rx_data_length + 1);
+  if (!buffer)
+      return ESP_ERR_NO_MEM;
 
-  while((token = strsep((char **) &handle->uart_rx_buffer, "\r")) != NULL) {
+  // Keep track of the original pointer for freeing later
+  char *orig_buffer_ptr = buffer;
+
+  memcpy(buffer, handle->uart_rx_buffer, handle->uart_rx_data_length);
+
+  // NULL terminate since we use string functions
+  buffer[handle->uart_rx_data_length] = '\0';
+
+  while((token = strsep(&buffer, "\r")) != NULL) {
     if (*token == '\0') continue;
     while((subtoken = strsep(&token, "\t")) != NULL) {
       if (*subtoken == '\n') {
         subtoken++;
-        strncpy(field, subtoken, sizeof(field));
+        strncpy(field, subtoken, sizeof(field) - 1);
+        field[sizeof(field) - 1] = '\0';
       } else {
-        strncpy(value, subtoken, sizeof(value));
+        strncpy(value, subtoken, sizeof(value) - 1);
+        value[sizeof(value) - 1] = '\0';
       }
     }
-    victron_mppt_set_value_from_str(field, value, data);
+      victron_mppt_set_value_from_str(field, value, data);
   }
+
+  free(orig_buffer_ptr);
+
   return ESP_OK;
 }
 
@@ -247,4 +258,49 @@ void victron_mppt_print_data(victron_mppt_data_t *data)
        data->maximum_power_yesterday,
        data->day_sequence_number
      );
+}
+
+esp_err_t victron_mppt_listen_uart(victron_mppt_handle_t handle)
+{
+    CHECK_ARG(handle && handle->uart_rx_buffer);
+
+    uart_event_t uart_event;
+
+    if (xQueueReceive(handle->uart_event_queue, (void *)&uart_event, (TickType_t)portMAX_DELAY)) {
+        switch (uart_event.type) {
+            case UART_DATA:
+                CHECK(uart_get_buffered_data_len(handle->uart_port, &handle->uart_rx_data_length));
+                if (handle->uart_rx_data_length > 0) {
+                  handle->uart_rx_data_length = uart_read_bytes(handle->uart_port, handle->uart_rx_buffer, VICTRON_MPPT_RX_BUFFER_SIZE, 50 / portTICK_PERIOD_MS);
+                  uart_flush(handle->uart_port);
+                  ESP_LOGI(TAG, "Received data:");
+                  ESP_LOG_BUFFER_HEXDUMP(TAG, handle->uart_rx_buffer, handle->uart_rx_data_length, ESP_LOG_INFO);
+                }
+                break;
+            case UART_FIFO_OVF:
+                ESP_LOGE(TAG, "FIFO overflow");
+                uart_flush_input(handle->uart_port);
+                xQueueReset(handle->uart_event_queue);
+                break;
+            case UART_BUFFER_FULL:
+                ESP_LOGI(TAG, "Ring buffer full");
+                uart_flush_input(handle->uart_port);
+                xQueueReset(handle->uart_event_queue);
+                break;
+            case UART_BREAK:
+                ESP_LOGI(TAG, "UART RX break");
+                break;
+            case UART_PARITY_ERR:
+                ESP_LOGI(TAG, "UART parity error");
+                break;
+            case UART_FRAME_ERR:
+                ESP_LOGI(TAG, "UART frame error");
+                break;
+            default:
+                ESP_LOGI(TAG, "UART event type: %d", uart_event.type);
+                break;
+        }
+    }
+
+    return ESP_OK;
 }

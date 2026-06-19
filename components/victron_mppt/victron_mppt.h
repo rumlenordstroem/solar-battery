@@ -14,9 +14,8 @@
 #define VICTRON_MPPT_PARITY UART_PARITY_DISABLE
 #define VICTRON_MPPT_STOP_BITS UART_STOP_BITS_1
 #define VICTRON_MPPT_FLOWCTRL UART_HW_FLOWCTRL_DISABLE
-#define VICTRON_MPPT_RX_BUFFER_SIZE 1024
-
-#define VICTRON_MPPT_TRANSMIT_INTERVAL_MS 1000
+#define VICTRON_MPPT_RX_BUFFER_SIZE 512
+#define VICTRON_MPPT_UART_QUEUE_SIZE 5
 
 typedef struct {
     uint16_t product_id;
@@ -69,6 +68,7 @@ typedef struct {
     uart_port_t uart_port;
     size_t uart_rx_data_length;
     uint8_t *uart_rx_buffer;
+    QueueHandle_t uart_event_queue;
 } victron_mppt_t;
 
 typedef victron_mppt_t * victron_mppt_handle_t;
@@ -80,3 +80,4 @@ int victron_mppt_parse_text(victron_mppt_handle_t handle, victron_mppt_data_t *d
 void victron_mppt_print_data(victron_mppt_data_t *data);
 victron_mppt_field_t victron_mppt_get_field_from_str(const char *field);
 esp_err_t victron_mppt_set_value_from_str(const char *field, const char *value, victron_mppt_data_t *data);
+esp_err_t victron_mppt_listen_uart(victron_mppt_handle_t handle);
