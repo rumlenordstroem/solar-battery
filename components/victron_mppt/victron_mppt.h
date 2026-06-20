@@ -1,9 +1,9 @@
 #pragma once
 
 #include <stdint.h>
-#include "driver/uart.h"
 #include "hal/uart_types.h"
 #include "soc/gpio_num.h"
+#include "freertos/idf_additions.h"
 #include "esp_err.h"
 
 #define VICTRON_MPPT_DATA_FORMAT "\r\nPID\t0x%hx\r\nFW\t%hu\r\nSER#\t%s\r\nV\t%ld\r\nI\t%ld\r\nVPV\t%ld\r\nPPV\t%ld\r\nCS\t%hhu\r\nMPPT\t%hhu\r\nOR\t0x%lx\r\nERR\t%hhu\r\nLOAD\t%s\r\nIL\t%ld\r\nH19\t%ld\r\nH20\t%ld\r\nH21\t%ld\r\nH22\t%ld\r\nH23\t%ld\r\nHSDS\t%ld\r\nChecksum\t"

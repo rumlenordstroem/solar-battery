@@ -193,24 +193,18 @@ esp_err_t victron_mppt_parse_text(victron_mppt_handle_t handle, victron_mppt_dat
 {
   CHECK_ARG(handle && handle->uart_rx_buffer && data);
 
-  char field[9];
-  char value[33];
-
-  char *token, *subtoken;
-
   // Nothing to parse
   if (handle->uart_rx_data_length == 0) return ESP_OK;
 
+  // Verify data integrity
   CHECK(victron_mppt_check_text_checksum(handle));
 
-  char *buffer = (char *) malloc(handle->uart_rx_data_length + 1);
-  if (!buffer)
-      return ESP_ERR_NO_MEM;
+  char field[9];
+  char value[33];
 
-  // Keep track of the original pointer for freeing later
-  char *orig_buffer_ptr = buffer;
+  char *buffer, *token, *subtoken;
 
-  memcpy(buffer, handle->uart_rx_buffer, handle->uart_rx_data_length);
+  buffer = (char *) handle->uart_rx_buffer;
 
   // NULL terminate since we use string functions
   buffer[handle->uart_rx_data_length] = '\0';
@@ -227,10 +221,8 @@ esp_err_t victron_mppt_parse_text(victron_mppt_handle_t handle, victron_mppt_dat
         value[sizeof(value) - 1] = '\0';
       }
     }
-      victron_mppt_set_value_from_str(field, value, data);
+    victron_mppt_set_value_from_str(field, value, data);
   }
-
-  free(orig_buffer_ptr);
 
   return ESP_OK;
 }
