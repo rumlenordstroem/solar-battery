@@ -65,9 +65,13 @@ typedef enum victron_mppt_field_t {
 } victron_mppt_field_t;
 
 typedef struct {
+    uint8_t *buffer;
+    size_t length;
+} uart_packet_t;
+
+typedef struct {
     uart_port_t uart_port;
-    size_t uart_rx_data_length;
-    uint8_t *uart_rx_buffer;
+    uart_packet_t uart_rx;
     QueueHandle_t uart_event_queue;
 } victron_mppt_t;
 
