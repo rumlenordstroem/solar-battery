@@ -15,9 +15,9 @@ static const char *TAG = "victron_mppt";
 #define CHECK(x) do { esp_err_t __; if ((__ = x) != ESP_OK) return __; } while (0)
 #define CHECK_ARG(VAL) do { if (!(VAL)) return ESP_ERR_INVALID_ARG; } while (0)
 
-esp_err_t victron_mppt_init(victron_mppt_handle_t handle, uart_port_t uart_port, gpio_num_t rx_gpio_num, gpio_num_t tx_gpio_num)
+esp_err_t victron_mppt_init(victron_mppt_handle_t victron_mppt, uart_port_t uart_port, gpio_num_t rx_gpio_num, gpio_num_t tx_gpio_num)
 {
-    CHECK_ARG(handle);
+    CHECK_ARG(victron_mppt);
 
     const uart_config_t uart_config = {
         .baud_rate = VICTRON_MPPT_BAUD_RATE,
@@ -27,33 +27,33 @@ esp_err_t victron_mppt_init(victron_mppt_handle_t handle, uart_port_t uart_port,
         .flow_ctrl = VICTRON_MPPT_FLOWCTRL,
     };
 
-    handle->uart_port = uart_port;
-    handle->uart_rx.buffer = (uint8_t *) malloc(VICTRON_MPPT_RX_BUFFER_SIZE);
-    if (!handle->uart_rx.buffer)
+    victron_mppt->uart_port = uart_port;
+    victron_mppt->uart_rx.buffer = (uint8_t *) malloc(VICTRON_MPPT_RX_BUFFER_SIZE);
+    if (!victron_mppt->uart_rx.buffer)
         return ESP_ERR_NO_MEM;
 
-    CHECK(uart_driver_install(handle->uart_port, VICTRON_MPPT_RX_BUFFER_SIZE, 0, VICTRON_MPPT_UART_QUEUE_SIZE, &handle->uart_event_queue, 0));
-    CHECK(uart_param_config(handle->uart_port, &uart_config));
-    CHECK(uart_set_pin(handle->uart_port, tx_gpio_num, rx_gpio_num, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+    CHECK(uart_driver_install(victron_mppt->uart_port, VICTRON_MPPT_RX_BUFFER_SIZE, 0, VICTRON_MPPT_UART_QUEUE_SIZE, &victron_mppt->uart_event_queue, 0));
+    CHECK(uart_param_config(victron_mppt->uart_port, &uart_config));
+    CHECK(uart_set_pin(victron_mppt->uart_port, tx_gpio_num, rx_gpio_num, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
     return ESP_OK;
 }
 
-esp_err_t victron_mppt_free(victron_mppt_handle_t handle)
+esp_err_t victron_mppt_free(victron_mppt_handle_t victron_mppt)
 {
-    CHECK_ARG(handle && handle->uart_rx.buffer);
+    CHECK_ARG(victron_mppt && victron_mppt->uart_rx.buffer);
 
-    free(handle->uart_rx.buffer);
-    handle->uart_rx.buffer = NULL;
+    free(victron_mppt->uart_rx.buffer);
+    victron_mppt->uart_rx.buffer = NULL;
     return ESP_OK;
 }
- esp_err_t victron_mppt_check_text_checksum(victron_mppt_handle_t handle)
+ esp_err_t victron_mppt_check_text_checksum(victron_mppt_uart_packet_handle_t victron_mppt)
 {
-    CHECK_ARG(handle && handle->uart_rx.buffer);
+    CHECK_ARG(victron_mppt && victron_mppt->buffer);
 
     int checksum = 0;
-    for (int i = 0; i < handle->uart_rx.length; i++) {
-        checksum = (checksum + handle->uart_rx.buffer[i]) & 255; /* Take modulo 256 in account */
+    for (int i = 0; i < victron_mppt->length; i++) {
+        checksum = (checksum + victron_mppt->buffer[i]) & 255; /* Take modulo 256 in account */
     }
 
     if (checksum == 0) {
@@ -63,23 +63,23 @@ esp_err_t victron_mppt_free(victron_mppt_handle_t handle)
     return ESP_ERR_INVALID_CRC;
 }
 
-esp_err_t victron_mppt_read_data(victron_mppt_handle_t handle)
+esp_err_t victron_mppt_read_data(victron_mppt_handle_t victron_mppt)
 {
-    CHECK_ARG(handle && handle->uart_rx.buffer);
+    CHECK_ARG(victron_mppt && victron_mppt->uart_rx.buffer);
 
-    CHECK(uart_get_buffered_data_len(handle->uart_port, &handle->uart_rx.length));
+    CHECK(uart_get_buffered_data_len(victron_mppt->uart_port, &victron_mppt->uart_rx.length));
 
-    if (handle->uart_rx.length > 0) {
+    if (victron_mppt->uart_rx.length > 0) {
         // Clear RX buffer
-        memset(handle->uart_rx.buffer, 0, VICTRON_MPPT_RX_BUFFER_SIZE);
+        memset(victron_mppt->uart_rx.buffer, 0, VICTRON_MPPT_RX_BUFFER_SIZE);
 
-        handle->uart_rx.length = uart_read_bytes(handle->uart_port, handle->uart_rx.buffer, handle->uart_rx.length, 100 / portTICK_PERIOD_MS);
+        victron_mppt->uart_rx.length = uart_read_bytes(victron_mppt->uart_port, victron_mppt->uart_rx.buffer, victron_mppt->uart_rx.length, 100 / portTICK_PERIOD_MS);
 
-        ESP_LOGI(TAG, "UART RX buffer has %d bytes.", handle->uart_rx.length);
-        ESP_LOG_BUFFER_HEXDUMP(TAG, handle->uart_rx.buffer, handle->uart_rx.length, ESP_LOG_INFO);
+        ESP_LOGI(TAG, "UART RX buffer has %d bytes.", victron_mppt->uart_rx.length);
+        ESP_LOG_BUFFER_HEXDUMP(TAG, victron_mppt->uart_rx.buffer, victron_mppt->uart_rx.length, ESP_LOG_INFO);
 
         // Clear buffer
-        uart_flush(handle->uart_port);
+        uart_flush(victron_mppt->uart_port);
     } else {
         ESP_LOGI(TAG, "UART RX buffer is empty. Nothing was read.");
     }
@@ -115,7 +115,7 @@ victron_mppt_field_t victron_mppt_get_field_from_str(const char *field)
     return UNKNOWN;
 }
 
-esp_err_t victron_mppt_set_value_from_str(const char *field, const char *value, victron_mppt_data_t *data)
+esp_err_t victron_mppt_set_value_from_str(const char *field, const char *value, victron_mppt_data_handle_t data)
 {
     CHECK_ARG(field && value && data);
 
@@ -188,25 +188,25 @@ esp_err_t victron_mppt_set_value_from_str(const char *field, const char *value, 
     return ESP_OK;
 }
 
-esp_err_t victron_mppt_parse_text(victron_mppt_handle_t handle, victron_mppt_data_t *data)
+esp_err_t victron_mppt_parse_text(victron_mppt_uart_packet_handle_t victron_mppt, victron_mppt_data_handle_t data)
 {
-    CHECK_ARG(handle && handle->uart_rx.buffer && data);
+    CHECK_ARG(victron_mppt && victron_mppt->buffer && data);
 
     // Nothing to parse
-    if (handle->uart_rx.length == 0) return ESP_OK;
+    if (victron_mppt->length == 0) return ESP_OK;
 
     // Verify data integrity
-    CHECK(victron_mppt_check_text_checksum(handle));
+    CHECK(victron_mppt_check_text_checksum(victron_mppt));
 
     char field[9];
     char value[33];
 
     char *buffer, *token, *subtoken;
 
-    buffer = (char *) handle->uart_rx.buffer;
+    buffer = (char *) victron_mppt->buffer;
 
     // NULL terminate since we use string functions
-    buffer[handle->uart_rx.length] = '\0';
+    buffer[victron_mppt->length] = '\0';
 
     while((token = strsep(&buffer, "\r")) != NULL) {
         if (*token == '\0') continue;
@@ -226,7 +226,7 @@ esp_err_t victron_mppt_parse_text(victron_mppt_handle_t handle, victron_mppt_dat
     return ESP_OK;
 }
 
-void victron_mppt_print_data(victron_mppt_data_t *data)
+void victron_mppt_print_data(victron_mppt_data_handle_t data)
 {
     printf("PID 0x%hx\nFirmware version %hu\nSerial number %s\nBattery voltage %ldmV\nBattery current %ldmA\nSolar voltage %ldmV\nSolar power %ldW\nState of operation %hhu\nTracker operation mode %hhu\nOff reason 0x%lx\nError code %hhu\nLoad output state %s\nLoad current %ldmA\nYield total %lukWh(0.01)\nYield today %lukWh(0.01)\nMaximum power today %luW\nYield yesterday %lukWh(0.01)\nMaximum power yesterday %lukWh(0.01)\nDay sequence number %lu\n",
         data->product_id,
@@ -251,32 +251,32 @@ void victron_mppt_print_data(victron_mppt_data_t *data)
     );
 }
 
-esp_err_t victron_mppt_listen_uart(victron_mppt_handle_t handle)
+esp_err_t victron_mppt_listen_uart(victron_mppt_handle_t victron_mppt)
 {
-    CHECK_ARG(handle && handle->uart_rx.buffer);
+    CHECK_ARG(victron_mppt && victron_mppt->uart_rx.buffer);
 
     uart_event_t uart_event;
 
-    if (xQueueReceive(handle->uart_event_queue, (void *)&uart_event, (TickType_t)portMAX_DELAY)) {
+    if (xQueueReceive(victron_mppt->uart_event_queue, (void *)&uart_event, (TickType_t)portMAX_DELAY)) {
         switch (uart_event.type) {
         case UART_DATA:
-            CHECK(uart_get_buffered_data_len(handle->uart_port, &handle->uart_rx.length));
-            if (handle->uart_rx.length > 0) {
-                handle->uart_rx.length = uart_read_bytes(handle->uart_port, handle->uart_rx.buffer, VICTRON_MPPT_RX_BUFFER_SIZE, 50 / portTICK_PERIOD_MS);
-                uart_flush(handle->uart_port);
+            CHECK(uart_get_buffered_data_len(victron_mppt->uart_port, &victron_mppt->uart_rx.length));
+            if (victron_mppt->uart_rx.length > 0) {
+                victron_mppt->uart_rx.length = uart_read_bytes(victron_mppt->uart_port, victron_mppt->uart_rx.buffer, VICTRON_MPPT_RX_BUFFER_SIZE, 50 / portTICK_PERIOD_MS);
+                uart_flush(victron_mppt->uart_port);
                 ESP_LOGI(TAG, "Received data:");
-                ESP_LOG_BUFFER_HEXDUMP(TAG, handle->uart_rx.buffer, handle->uart_rx.length, ESP_LOG_INFO);
+                ESP_LOG_BUFFER_HEXDUMP(TAG, victron_mppt->uart_rx.buffer, victron_mppt->uart_rx.length, ESP_LOG_INFO);
             }
             break;
         case UART_FIFO_OVF:
         ESP_LOGE(TAG, "FIFO overflow");
-            uart_flush_input(handle->uart_port);
-            xQueueReset(handle->uart_event_queue);
+            uart_flush_input(victron_mppt->uart_port);
+            xQueueReset(victron_mppt->uart_event_queue);
             break;
         case UART_BUFFER_FULL:
             ESP_LOGI(TAG, "Ring buffer full");
-            uart_flush_input(handle->uart_port);
-            xQueueReset(handle->uart_event_queue);
+            uart_flush_input(victron_mppt->uart_port);
+            xQueueReset(victron_mppt->uart_event_queue);
             break;
         case UART_BREAK:
             ESP_LOGI(TAG, "UART RX break");

@@ -40,6 +40,8 @@ typedef struct {
     uint32_t checksum;
 } victron_mppt_data_t;
 
+typedef victron_mppt_data_t *victron_mppt_data_handle_t;
+
 typedef enum victron_mppt_field_t {
     PRODUCT_ID,
     FIRMWARE_VERSION,
@@ -64,24 +66,72 @@ typedef enum victron_mppt_field_t {
     UNKNOWN
 } victron_mppt_field_t;
 
+typedef enum victron_mppt_off_reason_t {
+    NO_INPUT_POWER = 0x0000001,
+    SWITCHED_OFF_POWER_SWITCH = 0x0000001,
+    SWITCHED_OFF_DEVICE_MODE_REGISTER = 0x0000004,
+    REMOTE_INPUT = 0x00000008,
+    PROTECTION_ACTIVE = 0x00000010,
+    PAYGO = 0x00000020,
+    BMS = 0x00000040,
+    ENGINE_SHUTDOWN_DETECTION = 0x00000080,
+    ANALYSING_INPUT_VOLTAGE = 0x00000100,
+} victron_mppt_off_reason_t;
+
+typedef enum victron_mppt_state_of_operation_t {
+    OFF = 0,
+    FAULT = 2,
+    BULK = 3,
+    ABSORPTION = 4,
+    FLOAT = 5,
+    EQUALIZE = 7,
+    STARTING_UP = 245,
+    AUTO_EQUALIZE = 247,
+    EXTERNAL_CONTROL = 252,
+} victron_mppt_state_of_operation_t;
+
+typedef enum victron_mppt_error_code_t {
+    NO_ERROR = 0,
+    BATTERY_VOLTAGE_TOO_HIGH = 2,
+    CHARGER_TEMPERATURE_TOO_HIGH = 17,
+    CHARGER_OVER_CURRENT = 18,
+    CHARGER_CURRENT_REVERSED = 19,
+    BULK_TIME_LIMIT_EXCEEDED = 20,
+    CURRENT_SENSOR_ISSUE = 21,
+    TERMINALS_OVERHEATED = 26,
+    INPUT_VOLTAGE_TOO_HIGH = 33,
+    INPUT_CURRENT_TOO_HIGH = 34,
+    INPUT_SHUTDOWN_EXCESSIVE_BATTERY_VOLTAGE = 38,
+    INPUT_SHUTDOWN_CURRENT_FLOW_IN_OFF_MODE = 39,
+    LOST_COMMUNICATION = 65,
+    SYNCHRONISED_CHARGING_DEVICE_CONFIGURATION_ISSUE = 66,
+    BMS_LOST_CONNECTION = 67,
+    NETWORK_MISCONFIGURED = 68,
+    FACTORY_CALIBRATION_DATA_LOST = 116,
+    INVALID_FIRMWARE = 117,
+    USER_INVALID_SETTINGS = 119,
+} victron_mppt_error_code_t;
+
 typedef struct {
     uint8_t *buffer;
     size_t length;
-} uart_packet_t;
+} victron_mppt_uart_packet_t;
+
+typedef victron_mppt_uart_packet_t *victron_mppt_uart_packet_handle_t;
 
 typedef struct {
     uart_port_t uart_port;
-    uart_packet_t uart_rx;
+    victron_mppt_uart_packet_t uart_rx;
     QueueHandle_t uart_event_queue;
 } victron_mppt_t;
 
-typedef victron_mppt_t * victron_mppt_handle_t;
+typedef victron_mppt_t *victron_mppt_handle_t;
 
-esp_err_t victron_mppt_init(victron_mppt_handle_t handle, uart_port_t uart_port, gpio_num_t rx_gpio_num, gpio_num_t tx_gpio_num);
-esp_err_t victron_mppt_free(victron_mppt_handle_t handle);
-esp_err_t victron_mppt_read_data(victron_mppt_handle_t handle);
-int victron_mppt_parse_text(victron_mppt_handle_t handle, victron_mppt_data_t *data);
-void victron_mppt_print_data(victron_mppt_data_t *data);
+esp_err_t victron_mppt_init(victron_mppt_handle_t victron_mppt, uart_port_t uart_port, gpio_num_t rx_gpio_num, gpio_num_t tx_gpio_num);
+esp_err_t victron_mppt_free(victron_mppt_handle_t victron_mppt);
+esp_err_t victron_mppt_read_data(victron_mppt_handle_t victron_mppt);
+int victron_mppt_parse_text(victron_mppt_uart_packet_handle_t uart_packet, victron_mppt_data_handle_t data);
+void victron_mppt_print_data(victron_mppt_data_handle_t data);
 victron_mppt_field_t victron_mppt_get_field_from_str(const char *field);
-esp_err_t victron_mppt_set_value_from_str(const char *field, const char *value, victron_mppt_data_t *data);
-esp_err_t victron_mppt_listen_uart(victron_mppt_handle_t handle);
+esp_err_t victron_mppt_set_value_from_str(const char *field, const char *value, victron_mppt_data_handle_t data);
+esp_err_t victron_mppt_listen_uart(victron_mppt_handle_t victron_mppt);
