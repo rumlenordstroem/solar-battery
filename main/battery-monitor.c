@@ -14,7 +14,9 @@
 #include "esp_err.h"
 #include "hal/uart_types.h"
 #include "esp_log.h"
+#include "nvs.h"
 #include "portmacro.h"
+#include "nvs_flash.h"
 
 #include "victron_mppt.h"
 #include "state_of_charge.h"
@@ -41,6 +43,8 @@ static const char *TAG = "solar_battery";
 
 #define VICTRON_MPPT_UART_RX_PIN 16
 #define VICTRON_MPPT_UART_TX_PIN 17
+
+#define INIT_STATE_OF_CHARGE_FROM_NVS true
 
 const uint8_t char_data[] =
 {
@@ -144,19 +148,18 @@ static void victron_mppt_uart_event_task(void *pvParameters)
 
 static void victron_mppt_process_data_task(void *pvParameters)
 {
-    victron_mppt_uart_packet_t uart_packet;
+    victron_mppt_uart_packet_t uart_packet = {0};
     victron_mppt_uart_packet_handle_t uart_packet_handle = &uart_packet;
 
     while (1) {
         if (xQueueReceive(process_data_queue, uart_packet_handle, portMAX_DELAY)) {
-            victron_mppt_data_t victron_mppt_data;
+            victron_mppt_data_t victron_mppt_data = {0};
             victron_mppt_data_handle_t victron_mppt_data_handle = &victron_mppt_data;
-            ESP_LOGI(TAG, "Processing data:");
-            ESP_LOG_BUFFER_HEXDUMP(TAG, uart_packet_handle->buffer, uart_packet_handle->length, ESP_LOG_INFO);
-            victron_mppt_parse_text(uart_packet_handle, victron_mppt_data_handle);
+            ESP_LOGI(TAG, "Processing data");
+            ESP_ERROR_CHECK(victron_mppt_parse_text(uart_packet_handle, victron_mppt_data_handle));
             victron_mppt_print_data(victron_mppt_data_handle);
-            free(uart_packet_handle->buffer);
             xQueueSend(update_display_queue, victron_mppt_data_handle, portMAX_DELAY);
+            free(uart_packet_handle->buffer);
         }
     }
     vTaskDelete(NULL);
@@ -199,25 +202,74 @@ static void hd44780_update_display_task(void *pvParameters)
     hd44780_upload_character(&lcd, CHARGE_LEVEL_80_PERCENT, char_data + (CHARGE_LEVEL_80_PERCENT * 8));
     hd44780_upload_character(&lcd, CHARGE_LEVEL_100_PERCENT, char_data + (CHARGE_LEVEL_100_PERCENT * 8));
 
-    victron_mppt_data_t victron_mppt_data;
+    victron_mppt_data_t victron_mppt_data = {0};
     victron_mppt_data_handle_t victron_mppt_data_handle = &victron_mppt_data;
-    state_of_charge_t state_of_charge;
+    state_of_charge_t state_of_charge = {0};
     state_of_charge_handle_t state_of_charge_handle = &state_of_charge;
 
-    state_of_charge_init(state_of_charge_handle, AMPERE_HOURS_TO_MILLI_COULOMB(8), AMPERE_HOURS_TO_MILLI_COULOMB(9));
+    ESP_ERROR_CHECK(state_of_charge_init(state_of_charge_handle, AMPERE_HOURS_TO_MILLI_COULOMB(8), AMPERE_HOURS_TO_MILLI_COULOMB(9)));
+
+    esp_err_t nvs_err = nvs_flash_init();
+    if (nvs_err == ESP_ERR_NVS_NO_FREE_PAGES || nvs_err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ESP_ERROR_CHECK(nvs_flash_init());
+    }
+
+    nvs_handle_t nvs_handle;
+    ESP_ERROR_CHECK(nvs_open("nvs_storage", NVS_READWRITE, &nvs_handle));
+
+    // Read charge and capacity
+    if (INIT_STATE_OF_CHARGE_FROM_NVS) {
+        ESP_LOGI(TAG, "Reading state of charge from NVS");
+        nvs_err = nvs_get_i64(nvs_handle, "charge_mc", &state_of_charge_handle->charge_mc);
+        switch (nvs_err) {
+            case ESP_OK:
+                ESP_LOGI(TAG, "Found charge %" PRIi64 " mC", state_of_charge_handle->charge_mc);
+                break;
+            case ESP_ERR_NVS_NOT_FOUND:
+                ESP_LOGW(TAG, "Charge is not initialized in NVS yet");
+                break;
+            default:
+                ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(nvs_err));
+        }
+        nvs_err = nvs_get_i64(nvs_handle, "capacity_mc", &state_of_charge_handle->capacity_mc);
+        switch (nvs_err) {
+            case ESP_OK:
+                ESP_LOGI(TAG, "Found capacity %" PRIi64 " mC", state_of_charge_handle->capacity_mc);
+                break;
+            case ESP_ERR_NVS_NOT_FOUND:
+                ESP_LOGW(TAG, "Capacity is not initialized in NVS yet");
+                break;
+            default:
+                ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(nvs_err));
+        }
+    }
 
     char display_lines[4][21];
-    printf("%d\n", sizeof(display_lines));
     memset(display_lines, 0, sizeof(display_lines));
 
     while (1) {
         if (xQueueReceive(update_display_queue, victron_mppt_data_handle, portMAX_DELAY)) {
-            ESP_LOGI(TAG, "Displaying data");
             if (victron_mppt_data_handle->state_of_operation == FLOAT) {
-                state_of_charge_calibrate_capacity_at_full(state_of_charge_handle);
+                ESP_ERROR_CHECK(state_of_charge_calibrate_capacity_at_full(state_of_charge_handle));
+                ESP_ERROR_CHECK(nvs_set_i64(nvs_handle, "capacity_mc", state_of_charge_handle->capacity_mc));
             }
+
+            // TODO find a better way to determine empty state
+            if (strcmp(victron_mppt_data_handle->load_output_state, "OFF") == 0) {
+                ESP_ERROR_CHECK(state_of_charge_calibrate_charge_at_empty(state_of_charge_handle));
+            }
+
+            ESP_ERROR_CHECK(nvs_set_i64(nvs_handle, "charge_mc", state_of_charge_handle->charge_mc));
+
+            // Commit to NVS
+            ESP_ERROR_CHECK(nvs_commit(nvs_handle));
+
+            // Update state of charge
             state_of_charge_coulomb_count_update(state_of_charge_handle, victron_mppt_data_handle->battery_current);
-            printf("Battery percentage %ld %%\n", state_of_charge_handle->percentage);
+
+            // Update display
+            ESP_LOGI(TAG, "Updating display");
             snprintf(display_lines[0], sizeof(display_lines[0]), "\x08 %ld mV %ld mA", victron_mppt_data_handle->battery_voltage, victron_mppt_data_handle->battery_current);
             snprintf(display_lines[1], sizeof(display_lines[1]), "Charge: %ld %%", state_of_charge_handle->percentage);
             snprintf(display_lines[2], sizeof(display_lines[2]), "SV: %ld mV", victron_mppt_data_handle->solar_voltage);
@@ -232,6 +284,7 @@ static void hd44780_update_display_task(void *pvParameters)
             hd44780_puts(&lcd, display_lines[3]);
         }
     }
+    nvs_close(nvs_handle);
     vTaskDelete(NULL);
 }
 
