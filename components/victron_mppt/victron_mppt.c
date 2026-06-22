@@ -127,7 +127,8 @@ esp_err_t victron_mppt_set_value_from_str(const char *field, const char *value, 
         data->firmware_version = (uint16_t) strtoul(value, NULL, 10);
         break;
     case SERIAL_NUMBER:
-        strncpy(data->serial_number, value, sizeof(data->serial_number));
+        strncpy(data->serial_number, value, sizeof(data->serial_number) - 1);
+        data->serial_number[sizeof(data->serial_number) - 1] = '\0';
         break;
     case BATTERY_VOLTAGE:
         data->battery_voltage = (int32_t) strtol(value, NULL, 10);
@@ -154,7 +155,8 @@ esp_err_t victron_mppt_set_value_from_str(const char *field, const char *value, 
         data->error_code = (uint8_t) strtoul(value, NULL, 10);
         break;
     case LOAD_OUTPUT_STATE:
-        strncpy(data->load_output_state, value, sizeof(data->load_output_state));
+        strncpy(data->load_output_state, value, sizeof(data->load_output_state) - 1);
+        data->load_output_state[sizeof(data->load_output_state) - 1] = '\0';
         break;
     case LOAD_CURRENT:
         data->load_current = (int32_t) strtol(value, NULL, 10);
@@ -188,25 +190,25 @@ esp_err_t victron_mppt_set_value_from_str(const char *field, const char *value, 
     return ESP_OK;
 }
 
-esp_err_t victron_mppt_parse_text(victron_mppt_uart_packet_handle_t victron_mppt, victron_mppt_data_handle_t data)
+esp_err_t victron_mppt_parse_text(victron_mppt_uart_packet_handle_t uart_packet, victron_mppt_data_handle_t data)
 {
-    CHECK_ARG(victron_mppt && victron_mppt->buffer && data);
+    CHECK_ARG(uart_packet && uart_packet->buffer && data);
 
     // Nothing to parse
-    if (victron_mppt->length == 0) return ESP_OK;
+    if (uart_packet->length == 0) return ESP_OK;
 
     // Verify data integrity
-    CHECK(victron_mppt_check_text_checksum(victron_mppt));
+    CHECK(victron_mppt_check_text_checksum(uart_packet));
 
     char field[9];
     char value[33];
 
     char *buffer, *token, *subtoken;
 
-    buffer = (char *) victron_mppt->buffer;
+    buffer = (char *) uart_packet->buffer;
 
     // NULL terminate since we use string functions
-    buffer[victron_mppt->length] = '\0';
+    buffer[uart_packet->length] = '\0';
 
     while((token = strsep(&buffer, "\r")) != NULL) {
         if (*token == '\0') continue;

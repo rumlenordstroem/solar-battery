@@ -6,9 +6,6 @@
 #include "freertos/idf_additions.h"
 #include "esp_err.h"
 
-#define VICTRON_MPPT_DATA_FORMAT "\r\nPID\t0x%hx\r\nFW\t%hu\r\nSER#\t%s\r\nV\t%ld\r\nI\t%ld\r\nVPV\t%ld\r\nPPV\t%ld\r\nCS\t%hhu\r\nMPPT\t%hhu\r\nOR\t0x%lx\r\nERR\t%hhu\r\nLOAD\t%s\r\nIL\t%ld\r\nH19\t%ld\r\nH20\t%ld\r\nH21\t%ld\r\nH22\t%ld\r\nH23\t%ld\r\nHSDS\t%ld\r\nChecksum\t"
-#define VICTRON_MPPT_DATA_EXAMPLE "\r\nPID\t0xA075\r\nFW\t174\r\nSER#\tHQ25404JDUQ\r\nV\t12920\r\nI\t-10\r\nVPV\t30\r\nPPV\t0\r\nCS\t0\r\nMPPT\t0\r\nOR\t0x00000001\r\nERR\t0\r\nLOAD\tON\r\nIL\t0\r\nH19\t3\r\nH20\t0\r\nH21\t0\r\nH22\t0\r\nH23\t2\r\nHSDS\t6\r\nChecksum\t"
-
 #define VICTRON_MPPT_BAUD_RATE 19200
 #define VICTRON_MPPT_DATA_BITS UART_DATA_8_BITS
 #define VICTRON_MPPT_PARITY UART_PARITY_DISABLE
@@ -68,7 +65,7 @@ typedef enum victron_mppt_field_t {
 
 typedef enum victron_mppt_off_reason_t {
     NO_INPUT_POWER = 0x0000001,
-    SWITCHED_OFF_POWER_SWITCH = 0x0000001,
+    SWITCHED_OFF_POWER_SWITCH = 0x0000002,
     SWITCHED_OFF_DEVICE_MODE_REGISTER = 0x0000004,
     REMOTE_INPUT = 0x00000008,
     PROTECTION_ACTIVE = 0x00000010,
@@ -130,7 +127,7 @@ typedef victron_mppt_t *victron_mppt_handle_t;
 esp_err_t victron_mppt_init(victron_mppt_handle_t victron_mppt, uart_port_t uart_port, gpio_num_t rx_gpio_num, gpio_num_t tx_gpio_num);
 esp_err_t victron_mppt_free(victron_mppt_handle_t victron_mppt);
 esp_err_t victron_mppt_read_data(victron_mppt_handle_t victron_mppt);
-int victron_mppt_parse_text(victron_mppt_uart_packet_handle_t uart_packet, victron_mppt_data_handle_t data);
+esp_err_t victron_mppt_parse_text(victron_mppt_uart_packet_handle_t uart_packet, victron_mppt_data_handle_t data);
 void victron_mppt_print_data(victron_mppt_data_handle_t data);
 victron_mppt_field_t victron_mppt_get_field_from_str(const char *field);
 esp_err_t victron_mppt_set_value_from_str(const char *field, const char *value, victron_mppt_data_handle_t data);
