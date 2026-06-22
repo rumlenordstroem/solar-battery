@@ -5,6 +5,7 @@
 #include "driver/uart.h"
 #include "esp_err.h"
 #include "esp_log_level.h"
+#include "freertos/idf_additions.h"
 #include "hal/uart_types.h"
 #include "soc/gpio_num.h"
 #include "esp_log.h"
@@ -70,7 +71,7 @@ esp_err_t victron_mppt_uart_read_data(victron_mppt_handle_t victron_mppt)
     CHECK(uart_get_buffered_data_len(victron_mppt->uart_port, &length));
 
     if (length > 0) {
-        victron_mppt->uart_rx.length = uart_read_bytes(victron_mppt->uart_port, victron_mppt->uart_rx.buffer, VICTRON_MPPT_RX_BUFFER_SIZE, 50 / portTICK_PERIOD_MS);
+        victron_mppt->uart_rx.length = uart_read_bytes(victron_mppt->uart_port, victron_mppt->uart_rx.buffer, VICTRON_MPPT_RX_BUFFER_SIZE, 150 / portTICK_PERIOD_MS);
 
         ESP_LOGI(TAG, "UART RX buffer has %d bytes.", victron_mppt->uart_rx.length);
         ESP_LOG_BUFFER_HEXDUMP(TAG, victron_mppt->uart_rx.buffer, victron_mppt->uart_rx.length, ESP_LOG_INFO);
@@ -265,7 +266,7 @@ esp_err_t victron_mppt_listen_uart(victron_mppt_handle_t victron_mppt)
         case UART_DATA:
             CHECK(uart_get_buffered_data_len(victron_mppt->uart_port, &victron_mppt->uart_rx.length));
             if (victron_mppt->uart_rx.length > 0) {
-                victron_mppt->uart_rx.length = uart_read_bytes(victron_mppt->uart_port, victron_mppt->uart_rx.buffer, VICTRON_MPPT_RX_BUFFER_SIZE, 50 / portTICK_PERIOD_MS);
+                victron_mppt->uart_rx.length = uart_read_bytes(victron_mppt->uart_port, victron_mppt->uart_rx.buffer, VICTRON_MPPT_RX_BUFFER_SIZE, 150 / portTICK_PERIOD_MS);
                 uart_flush(victron_mppt->uart_port);
                 ESP_LOGI(TAG, "Received data:");
                 ESP_LOG_BUFFER_HEXDUMP(TAG, victron_mppt->uart_rx.buffer, victron_mppt->uart_rx.length, ESP_LOG_INFO);
