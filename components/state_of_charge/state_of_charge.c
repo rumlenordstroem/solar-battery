@@ -14,7 +14,7 @@ esp_err_t state_of_charge_update_percentage(state_of_charge_handle_t state_of_ch
 {
     CHECK_ARG(state_of_charge);
 
-    state_of_charge->percentage = (100 * (state_of_charge->charge_mc / 1000)) / (state_of_charge->capacity_mc / 1000);
+    state_of_charge->percentage = (int32_t)(100L * (state_of_charge->charge_mc / 1000L)) / (state_of_charge->capacity_mc / 1000L);
 
     return ESP_OK;
 }
@@ -23,12 +23,12 @@ esp_err_t state_of_charge_print(state_of_charge_handle_t state_of_charge)
 {
     CHECK_ARG(state_of_charge);
 
-    printf("Charge %ld mC\nCapacity %ld\nPercentage %ld %%\n", state_of_charge->charge_mc, state_of_charge->capacity_mc, state_of_charge->percentage);
+    printf("Charge %lld mC\nCapacity %lld\nPercentage %ld %%\n", state_of_charge->charge_mc, state_of_charge->capacity_mc, state_of_charge->percentage);
 
     return ESP_OK;
 }
 
-esp_err_t state_of_charge_init(state_of_charge_handle_t state_of_charge, uint32_t charge_mc, uint32_t capacity_mc)
+esp_err_t state_of_charge_init(state_of_charge_handle_t state_of_charge, uint64_t charge_mc, uint64_t capacity_mc)
 {
     CHECK_ARG(state_of_charge);
 
@@ -40,7 +40,7 @@ esp_err_t state_of_charge_init(state_of_charge_handle_t state_of_charge, uint32_
     return ESP_OK;
 }
 
-esp_err_t state_of_charge_coulomb_count_update(state_of_charge_handle_t state_of_charge, int32_t current_ma)
+esp_err_t state_of_charge_coulomb_count_update(state_of_charge_handle_t state_of_charge, int64_t current_ma)
 {
     CHECK_ARG(state_of_charge);
 
@@ -51,12 +51,12 @@ esp_err_t state_of_charge_coulomb_count_update(state_of_charge_handle_t state_of
 
     // Calculate delta time
     timersub(&timestamp, &state_of_charge->timestamp, &delta_time);
-    int32_t delta_time_ms = (int32_t)((int64_t)delta_time.tv_sec * 1000L + ((int64_t)delta_time.tv_usec / 1000L));
-    printf("delta time %ld\n", delta_time_ms);
+    int64_t delta_time_ms = ((int64_t)delta_time.tv_sec * 1000L + ((int64_t)delta_time.tv_usec / 1000L));
+    printf("delta time %lld\n", delta_time_ms);
     state_of_charge_print(state_of_charge);
 
     // Update state of charge (TODO check underflow)
-    state_of_charge->charge_mc = state_of_charge->charge_mc + ((current_ma * delta_time_ms) / 1000);
+    state_of_charge->charge_mc = state_of_charge->charge_mc + ((current_ma * delta_time_ms) / 1000L);
     CHECK(state_of_charge_update_percentage(state_of_charge));
 
     // Set new timestamp
@@ -82,7 +82,7 @@ esp_err_t state_of_charge_calibrate_charge_at_empty(state_of_charge_handle_t sta
 {
     CHECK_ARG(state_of_charge);
 
-    state_of_charge->charge_mc = 0;
+    state_of_charge->charge_mc = 0L;
 
     CHECK(state_of_charge_update_percentage(state_of_charge));
 
