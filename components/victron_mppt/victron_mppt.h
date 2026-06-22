@@ -126,7 +126,7 @@ typedef victron_mppt_t *victron_mppt_handle_t;
 
 esp_err_t victron_mppt_init(victron_mppt_handle_t victron_mppt, uart_port_t uart_port, gpio_num_t rx_gpio_num, gpio_num_t tx_gpio_num);
 esp_err_t victron_mppt_free(victron_mppt_handle_t victron_mppt);
-esp_err_t victron_mppt_read_data(victron_mppt_handle_t victron_mppt);
+esp_err_t victron_mppt_uart_read_data(victron_mppt_handle_t victron_mppt);
 esp_err_t victron_mppt_parse_text(victron_mppt_uart_packet_handle_t uart_packet, victron_mppt_data_handle_t data);
 esp_err_t victron_mppt_print_data(victron_mppt_data_handle_t data);
 esp_err_t victron_mppt_get_field_from_str(const char *field_str, victron_mppt_field_t *field);

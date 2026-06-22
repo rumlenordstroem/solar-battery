@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -45,8 +46,10 @@ esp_err_t victron_mppt_free(victron_mppt_handle_t victron_mppt)
 
     free(victron_mppt->uart_rx.buffer);
     victron_mppt->uart_rx.buffer = NULL;
+
     return ESP_OK;
 }
+
  esp_err_t victron_mppt_check_text_checksum(victron_mppt_uart_packet_handle_t victron_mppt)
 {
     CHECK_ARG(victron_mppt && victron_mppt->buffer);
@@ -56,30 +59,24 @@ esp_err_t victron_mppt_free(victron_mppt_handle_t victron_mppt)
         checksum = (checksum + victron_mppt->buffer[i]) & 255; /* Take modulo 256 in account */
     }
 
-    if (checksum == 0) {
-        return ESP_OK;
-    }
-
-    return ESP_ERR_INVALID_CRC;
+    return checksum == 0 ? ESP_OK : ESP_ERR_INVALID_CRC;
 }
 
-esp_err_t victron_mppt_read_data(victron_mppt_handle_t victron_mppt)
+esp_err_t victron_mppt_uart_read_data(victron_mppt_handle_t victron_mppt)
 {
     CHECK_ARG(victron_mppt && victron_mppt->uart_rx.buffer);
 
-    CHECK(uart_get_buffered_data_len(victron_mppt->uart_port, &victron_mppt->uart_rx.length));
+    size_t length = 0;
+    CHECK(uart_get_buffered_data_len(victron_mppt->uart_port, &length));
 
-    if (victron_mppt->uart_rx.length > 0) {
-        // Clear RX buffer
-        memset(victron_mppt->uart_rx.buffer, 0, VICTRON_MPPT_RX_BUFFER_SIZE);
-
-        victron_mppt->uart_rx.length = uart_read_bytes(victron_mppt->uart_port, victron_mppt->uart_rx.buffer, victron_mppt->uart_rx.length, 100 / portTICK_PERIOD_MS);
+    if (length > 0) {
+        victron_mppt->uart_rx.length = uart_read_bytes(victron_mppt->uart_port, victron_mppt->uart_rx.buffer, VICTRON_MPPT_RX_BUFFER_SIZE, 50 / portTICK_PERIOD_MS);
 
         ESP_LOGI(TAG, "UART RX buffer has %d bytes.", victron_mppt->uart_rx.length);
         ESP_LOG_BUFFER_HEXDUMP(TAG, victron_mppt->uart_rx.buffer, victron_mppt->uart_rx.length, ESP_LOG_INFO);
 
         // Clear buffer
-        uart_flush(victron_mppt->uart_port);
+        CHECK(uart_flush(victron_mppt->uart_port));
     } else {
         ESP_LOGI(TAG, "UART RX buffer is empty. Nothing was read.");
     }
@@ -232,7 +229,7 @@ esp_err_t victron_mppt_parse_text(victron_mppt_uart_packet_handle_t uart_packet,
 
 esp_err_t victron_mppt_print_data(victron_mppt_data_handle_t data)
 {
-    printf("PID 0x%hx\nFirmware version %hu\nSerial number %s\nBattery voltage %ldmV\nBattery current %ldmA\nSolar voltage %ldmV\nSolar power %ldW\nState of operation %hhu\nTracker operation mode %hhu\nOff reason 0x%lx\nError code %hhu\nLoad output state %s\nLoad current %ldmA\nYield total %lukWh(0.01)\nYield today %lukWh(0.01)\nMaximum power today %luW\nYield yesterday %lukWh(0.01)\nMaximum power yesterday %lukWh(0.01)\nDay sequence number %lu\n",
+    printf("PID 0x%hx\nFirmware version %hu\nSerial number %s\nBattery voltage %ldmV\nBattery current %ldmA\nSolar voltage %ldmV\nSolar power %ldW\nState of operation %hhu\nTracker operation mode %hhu\nOff reason 0x%lx\nError code %hhu\nLoad output state %s\nLoad current %ldmA\nYield total %lukWh(0.01)\nYield today %lukWh(0.01)\nMaximum power today %luW\nYield yesterday %lukWh(0.01)\nMaximum power yesterday %luW\nDay sequence number %lu\n",
         data->product_id,
         data->firmware_version,
         data->serial_number,
