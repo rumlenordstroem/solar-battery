@@ -129,7 +129,7 @@ static void victron_mppt_uart_event_task(void *pvParameters)
         if (handle->uart_rx.length > 0) {
             victron_mppt_uart_packet_t uart_packet;
             uart_packet.buffer = malloc(handle->uart_rx.length + 1);
-            uart_packet.length = handle->uart_rx.length + 1;
+            uart_packet.length = handle->uart_rx.length;
             if (!uart_packet.buffer) {
                 ESP_LOGE(TAG, "No memory");
             } else {
