@@ -1,11 +1,14 @@
-#include "state_of_charge.h"
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/_timeval.h>
 #include <sys/time.h>
 
 #include "esp_err.h"
+#include "esp_log.h"
+
+static const char *TAG = "state_of_charge";
+
+#include "state_of_charge.h"
 
 #define CHECK(x) do { esp_err_t __; if ((__ = x) != ESP_OK) return __; } while (0)
 #define CHECK_ARG(VAL) do { if (!(VAL)) return ESP_ERR_INVALID_ARG; } while (0)
@@ -23,7 +26,7 @@ esp_err_t state_of_charge_print(state_of_charge_handle_t state_of_charge)
 {
     CHECK_ARG(state_of_charge);
 
-    printf("Charge %lld mC\nCapacity %lld\nPercentage %ld %%\n", state_of_charge->charge_mc, state_of_charge->capacity_mc, state_of_charge->percentage);
+    printf("Charge %lld mC\nCapacity %lld mC\nPercentage %ld %%\n", state_of_charge->charge_mc, state_of_charge->capacity_mc, state_of_charge->percentage);
 
     return ESP_OK;
 }
@@ -52,10 +55,8 @@ esp_err_t state_of_charge_coulomb_count_update(state_of_charge_handle_t state_of
     // Calculate delta time
     timersub(&timestamp, &state_of_charge->timestamp, &delta_time);
     int64_t delta_time_ms = ((int64_t)delta_time.tv_sec * 1000L + ((int64_t)delta_time.tv_usec / 1000L));
-    printf("delta time %lld\n", delta_time_ms);
-    state_of_charge_print(state_of_charge);
 
-    // Update state of charge (TODO check underflow)
+    // Update state of charge
     state_of_charge->charge_mc = state_of_charge->charge_mc + ((current_ma * delta_time_ms) / 1000L);
     CHECK(state_of_charge_update_percentage(state_of_charge));
 
@@ -70,6 +71,8 @@ esp_err_t state_of_charge_calibrate_capacity_at_full(state_of_charge_handle_t st
 {
     CHECK_ARG(state_of_charge);
 
+    ESP_LOGI(TAG, "State of charge is 100%%. Updating capacity to %lld mC", state_of_charge->charge_mc);
+
     // Set the capacity to the current charge
     state_of_charge->capacity_mc = state_of_charge->charge_mc;
 
@@ -81,6 +84,8 @@ esp_err_t state_of_charge_calibrate_capacity_at_full(state_of_charge_handle_t st
 esp_err_t state_of_charge_calibrate_charge_at_empty(state_of_charge_handle_t state_of_charge)
 {
     CHECK_ARG(state_of_charge);
+
+    ESP_LOGI(TAG, "State of charge at 0%%. Updating charge to 0 mC");
 
     state_of_charge->charge_mc = 0L;
 
